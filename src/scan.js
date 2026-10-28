@@ -30,6 +30,20 @@ const GENERATED = [
 const ALWAYS_SKIP_DIRS = new Set([".git", ".hg", ".svn"]);
 const DEPENDENCY_DIRS = new Set(["node_modules"]);
 
+export function globToRegExp(glob) {
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*" && glob[i + 1] === "*") {
+      re += glob[i + 2] === "/" ? "(?:.*/)?" : ".*";
+      i += glob[i + 2] === "/" ? 2 : 1;
+    } else if (c === "*") re += "[^/]*";
+    else if (c === "?") re += "[^/]";
+    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${re}$|^${re}/`);
+}
+
 function toPosix(p) {
   return sep === "/" ? p : p.split(sep).join("/");
 }
@@ -70,7 +84,11 @@ function isGitRepo(root) {
 // tracked and untracked-but-not-ignored files; otherwise everything under root.
 export function listFiles(root, options) {
   let files = [];
-if (options.paths.length) {
+  if (options.changed) {
+    files = git(root, ["diff", "--name-only", "--diff-filter=ACMR", "-z", `${options.changed}...HEAD`])
+      .split("\0")
+      .filter(Boolean);
+  } else if (options.paths.length) {
     for (const p of options.paths) {
       const full = join(root, p);
       let st;
@@ -86,10 +104,12 @@ if (options.paths.length) {
     files = git(root, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
       .split("\0")
       .filter(Boolean);
+    if (options.deps) walk(join(root, "node_modules"), root, options, files);
   } else {
     walk(root, root, options, files);
   }
-  return [...new Set(files)].sort();
+  const ignores = options.ignore.map(globToRegExp);
+  return [...new Set(files)].filter((f) => !ignores.some((re) => re.test(f))).sort();
 }
 
 function looksBinary(buf) {
@@ -163,7 +183,7 @@ export function resolveOptions(raw = {}) {
     ...input,
   };
   const all = Object.keys(RULES);
-  let rules = input.rules ?? all;
+  let rules = input.rules ?? all.filter((r) => !(options.deps && r === "long-line"));
   for (const r of rules) if (!RULES[r]) throw new Error(`unknown rule: ${r} (known: ${all.join(", ")})`);
   if (input.disable) rules = rules.filter((r) => !input.disable.includes(r));
   options.rules = rules;

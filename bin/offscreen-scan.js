@@ -17,6 +17,9 @@ Options:
   --format <f>      text (default), json, github, sarif
   --output <file>   also write the report in --output-format to this file
   --output-format <f>  format for --output (default: sarif)
+  --changed <ref>   only scan files changed between <ref> and HEAD
+  --deps            also scan node_modules (long-line rule off unless --rules)
+  --ignore <glob>   skip matching paths (repeatable), e.g. "fixtures/**"
   --rules <list>    comma-separated rules to run (default: all)
   --disable <list>  comma-separated rules to skip
   --gap <n>         blank run length that counts as hiding (default 100)
@@ -48,6 +51,9 @@ function main() {
         format: { type: "string", default: "text" },
         output: { type: "string" },
         "output-format": { type: "string", default: "sarif" },
+        changed: { type: "string" },
+        deps: { type: "boolean", default: false },
+        ignore: { type: "string", multiple: true, default: [] },
         rules: { type: "string" },
         disable: { type: "string" },
         gap: { type: "string" },
@@ -84,6 +90,9 @@ function main() {
     }
     result = scan(process.cwd(), {
       paths: positionals,
+      ignore: o.ignore,
+      deps: o.deps,
+      changed: o.changed ?? null,
       rules: list(o.rules),
       disable: list(o.disable),
       gap: positiveInt("gap", o.gap),
