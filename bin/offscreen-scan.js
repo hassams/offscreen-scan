@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { failing, FORMATS, PKG } from "../src/report.js";
 import { RULES } from "../src/rules.js";
@@ -13,6 +14,9 @@ With no paths, scans the git repo's tracked and untracked (not ignored) files,
 or every file under the current directory outside a git repo.
 
 Options:
+  --format <f>      text (default), json, github, sarif
+  --output <file>   also write the report in --output-format to this file
+  --output-format <f>  format for --output (default: sarif)
   --rules <list>    comma-separated rules to run (default: all)
   --disable <list>  comma-separated rules to skip
   --gap <n>         blank run length that counts as hiding (default 100)
@@ -41,6 +45,9 @@ function main() {
     args = parseArgs({
       allowPositionals: true,
       options: {
+        format: { type: "string", default: "text" },
+        output: { type: "string" },
+        "output-format": { type: "string", default: "sarif" },
         rules: { type: "string" },
         disable: { type: "string" },
         gap: { type: "string" },
@@ -69,6 +76,8 @@ function main() {
   let result;
   try {
     for (const [flag, value, allowed] of [
+      ["format", o.format, Object.keys(FORMATS)],
+      ["output-format", o["output-format"], Object.keys(FORMATS)],
       ["fail-on", o["fail-on"], ["error", "warning", "none"]],
     ]) {
       if (!allowed.includes(value)) throw new Error(`--${flag} must be one of: ${allowed.join(", ")}`);
@@ -88,8 +97,9 @@ function main() {
   // Decide the exit code before --quiet hides anything.
   const failed = failing(result.findings, o["fail-on"]).length > 0;
   if (o.quiet) result.findings = result.findings.filter((f) => f.severity === "error");
-  const useColor = !o["no-color"] && process.stdout.isTTY && !process.env.NO_COLOR;
-  console.log(FORMATS.text(result, { useColor }));
+  const useColor = o.format === "text" && !o["no-color"] && process.stdout.isTTY && !process.env.NO_COLOR;
+  console.log(FORMATS[o.format](result, { useColor }));
+  if (o.output) writeFileSync(o.output, FORMATS[o["output-format"]](result) + "\n");
   return failed ? 1 : 0;
 }
 
