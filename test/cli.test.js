@@ -42,10 +42,34 @@ test("hidden code exits 1 and says where", () => {
   assert.match(r.stdout, /hidden: globalThis\.x = 1;/);
 });
 
+test("github format emits annotations", () => {
+  const r = run(repo({ "a.js": hidden }), "--format", "github");
+  assert.match(r.stdout, /^::error file=a\.js,line=1,col=1518,title=offscreen-scan whitespace-gap::/m);
+});
+
+test("sarif output is written alongside", () => {
+  const dir = repo({ "a.js": hidden });
+  const r = run(dir, "--output", "out.sarif");
+  assert.equal(r.status, 1);
+  const sarif = JSON.parse(readFileSync(join(dir, "out.sarif"), "utf8"));
+  assert.equal(sarif.version, "2.1.0");
+  assert.equal(sarif.runs[0].results[0].ruleId, "whitespace-gap");
+  assert.equal(sarif.runs[0].results[0].locations[0].physicalLocation.region.startColumn, 1518);
+});
+
 test("warnings fail only with --fail-on warning", () => {
   const dir = repo({ "a.js": "eval(atob(s));\n" });
   assert.equal(run(dir).status, 0);
   assert.equal(run(dir, "--fail-on", "warning").status, 1);
+});
+
+test("works outside git and skips binary files", () => {
+  const dir = repo({ "a.js": "ok;\n", "img.bin": Buffer.from([0, 1, 2, 0x20, 0x20]) }, { git: false });
+  const r = run(dir, "--format", "json");
+  assert.equal(r.status, 0);
+  const json = JSON.parse(r.stdout);
+  assert.equal(json.files, 2);
+  assert.equal(json.scanned, 1);
 });
 
 test("bad arguments exit 2", () => {
@@ -56,6 +80,12 @@ test("bad arguments exit 2", () => {
   assert.equal(run(dir, "--bogus").status, 2);
 });
 
+test("--quiet drops warnings", () => {
+  const dir = repo({ "a.js": "eval(atob(s));\n" });
+  const r = run(dir, "--quiet", "--format", "json");
+  assert.deepEqual(JSON.parse(r.stdout).findings, []);
+});
+
 test("tracked symlinks are not followed", { skip: process.platform === "win32" }, async () => {
   const { symlinkSync } = await import("node:fs");
   const outside = repo({ "secret.js": hidden }, { git: false });
@@ -64,4 +94,19 @@ test("tracked symlinks are not followed", { skip: process.platform === "win32" }
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "add", "."], { cwd: dir });
   const r = run(dir);
   assert.equal(r.status, 0, r.stdout);
+});
+
+test("file names are escaped in text and annotations", { skip: process.platform === "win32" }, () => {
+  const dir = repo({ "a\x1b[2J.js": hidden }, { git: false });
+  const text = run(dir, "--no-color").stdout;
+  assert.ok(!text.includes("\x1b"));
+  assert.match(text, /a\\u\{1b\}\[2J\.js:1:/);
+  assert.ok(!run(dir, "--format", "github").stdout.includes("\x1b"));
+});
+
+test("SARIF locations encode delimiters in file names", { skip: process.platform === "win32" }, () => {
+  const dir = repo({ "a#b?.js": hidden }, { git: false });
+  run(dir, "--output", "out.sarif");
+  const sarif = JSON.parse(readFileSync(join(dir, "out.sarif"), "utf8"));
+  assert.equal(sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri, "a%23b%3F.js");
 });
