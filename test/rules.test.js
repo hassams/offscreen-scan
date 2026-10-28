@@ -61,6 +61,35 @@ test("a byte order mark is fine only at the start of the file", () => {
   assert.deepEqual(rules("const a = 1;\nconst\u{feff} b = 2;"), ["invisible-char"]);
 });
 
+test("warns on very long lines, but not in generated files", () => {
+  const long = `x(${"1,".repeat(1500)});`;
+  assert.deepEqual(rules(long), ["long-line"]);
+  assert.deepEqual(rules(long, "vendor/lib.min.js"), []);
+  assert.deepEqual(rules(long, "package-lock.json"), []);
+});
+
+test("hiding rules still run on generated files", () => {
+  assert.ok(rules(`{}${" ".repeat(300)}${PAYLOAD}`, "package-lock.json").includes("whitespace-gap"));
+});
+
+test("warns on long encoded strings in code only", () => {
+  const blob = "QUJD".repeat(300);
+  assert.deepEqual(rules(`const p = "${blob}";`), ["encoded-blob"]);
+  assert.deepEqual(rules(`{"p": "${blob}"}`, "data.json"), []);
+  assert.deepEqual(rules(`const img = "data:image/png;base64,${blob}";`), []);
+});
+
+test("warns when a line decodes and executes", () => {
+  assert.deepEqual(rules(PAYLOAD), ["decode-and-run"]);
+  assert.deepEqual(rules("new Function(Buffer.from(s, 'base64').toString())()", "a.ts"), ["decode-and-run"]);
+  assert.deepEqual(rules("const s = atob(x);"), []);
+});
+
+test("rules can be selected and disabled", () => {
+  assert.deepEqual(rules(PAYLOAD, "a.js", { disable: ["decode-and-run"] }), []);
+  assert.throws(() => resolveOptions({ rules: ["nope"] }), /unknown rule/);
+});
+
 test("previews never pass control or invisible characters through", () => {
   assert.equal(escapePreview("a\x1b[2Jb\u{200b}c"), "a\\u{1b}[2Jb\\u{200b}c");
   assert.equal(escapePreview("x".repeat(70), 5), "xxxxx...");

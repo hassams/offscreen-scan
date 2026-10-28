@@ -7,7 +7,25 @@ const FIRST_VISIBLE = new RegExp(VISIBLE, "u");
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
+const CODE = new Set(
+  [
+    ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".vue", ".svelte",
+    ".py", ".rb", ".php", ".go", ".rs", ".java", ".kt", ".kts", ".scala", ".cs",
+    ".c", ".h", ".cc", ".cpp", ".hpp", ".swift", ".m", ".dart", ".lua", ".pl",
+    ".sh", ".bash", ".zsh", ".ps1", ".psm1", ".bat", ".cmd",
+  ],
+);
+
 const PROSE = new Set([".md", ".mdx", ".markdown", ".txt", ".rst", ".adoc"]);
+
+// Files that are long-lined or blob-heavy by nature. Only the hiding rules
+// (whitespace-gap, invisible-char) run on them.
+const GENERATED = [
+  /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|Cargo\.lock|poetry\.lock|composer\.lock|Gemfile\.lock|go\.sum)$/,
+  /\.min\.[a-z]+$/,
+  /\.(map|snap|svg)$/,
+  /(^|\/)(dist|build|vendor)\//,
+];
 
 const ALWAYS_SKIP_DIRS = new Set([".git", ".hg", ".svn"]);
 const DEPENDENCY_DIRS = new Set(["node_modules"]);
@@ -85,8 +103,10 @@ export function scanText(text, file, options) {
     file,
     options,
     rules: options.rules,
+    code: CODE.has(extname(file).toLowerCase()),
     prose: PROSE.has(extname(file).toLowerCase()),
     dependency: /(^|\/)node_modules\//.test(file),
+    generated: GENERATED.some((re) => re.test(file)),
     lineNumber: 0,
     prevIndent: 0,
   };
