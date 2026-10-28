@@ -13,14 +13,20 @@ With no paths, scans the git repo's tracked and untracked (not ignored) files,
 or every file under the current directory outside a git repo.
 
 Options:
+  --rules <list>    comma-separated rules to run (default: all)
+  --disable <list>  comma-separated rules to skip
   --gap <n>         blank run length that counts as hiding (default 100)
+  --max-line <n>    longest allowed line (default 2000)
   --fail-on <s>     error (default), warning, none
+  -q, --quiet       report errors only
   --no-color        plain text output
   -h, --help        show this help
   -v, --version     show version
 
 Rules: ${Object.keys(RULES).join(", ")}
 Exit codes: 0 clean, 1 findings at or above --fail-on, 2 usage error.`;
+
+const list = (s) => s?.split(",").map((x) => x.trim()).filter(Boolean);
 
 function positiveInt(name, value) {
   if (value === undefined) return undefined;
@@ -35,8 +41,12 @@ function main() {
     args = parseArgs({
       allowPositionals: true,
       options: {
+        rules: { type: "string" },
+        disable: { type: "string" },
         gap: { type: "string" },
+        "max-line": { type: "string" },
         "fail-on": { type: "string", default: "error" },
+        quiet: { type: "boolean", short: "q", default: false },
         "no-color": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
         version: { type: "boolean", short: "v", default: false },
@@ -65,14 +75,19 @@ function main() {
     }
     result = scan(process.cwd(), {
       paths: positionals,
+      rules: list(o.rules),
+      disable: list(o.disable),
       gap: positiveInt("gap", o.gap),
+      maxLine: positiveInt("max-line", o["max-line"]),
     });
   } catch (e) {
     console.error(`offscreen-scan: ${e.message}`);
     return 2;
   }
 
+  // Decide the exit code before --quiet hides anything.
   const failed = failing(result.findings, o["fail-on"]).length > 0;
+  if (o.quiet) result.findings = result.findings.filter((f) => f.severity === "error");
   const useColor = !o["no-color"] && process.stdout.isTTY && !process.env.NO_COLOR;
   console.log(FORMATS.text(result, { useColor }));
   return failed ? 1 : 0;

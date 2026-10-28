@@ -42,6 +42,12 @@ test("hidden code exits 1 and says where", () => {
   assert.match(r.stdout, /hidden: globalThis\.x = 1;/);
 });
 
+test("warnings fail only with --fail-on warning", () => {
+  const dir = repo({ "a.js": "eval(atob(s));\n" });
+  assert.equal(run(dir).status, 0);
+  assert.equal(run(dir, "--fail-on", "warning").status, 1);
+});
+
 test("bad arguments exit 2", () => {
   const dir = repo({ "a.js": "ok;\n" });
   assert.equal(run(dir, "--format", "xml").status, 2);

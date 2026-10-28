@@ -39,6 +39,8 @@ const RUN_IS_HIDING = 3;
 
 export const DEFAULTS = {
   gap: 100,
+  maxLine: 2000,
+  blobLength: 1000,
 };
 
 function classify(cp) {
@@ -138,9 +140,61 @@ export function whitespaceGap(line, ctx) {
   return findings;
 }
 
+export function longLine(line, ctx) {
+  if (ctx.generated || line.length <= ctx.options.maxLine) return [];
+  return [
+    {
+      rule: "long-line",
+      severity: "warning",
+      column: ctx.options.maxLine + 1,
+      message: `line is ${line.length} characters long`,
+      preview: line.slice(ctx.options.maxLine),
+    },
+  ];
+}
+
+const DATA_URI_TAIL = /data:[\w/+.-]+;base64,$/;
+
+export function encodedBlob(line, ctx) {
+  if (ctx.generated || !ctx.code) return [];
+  const re = new RegExp(`[A-Za-z0-9+/_-]{${ctx.options.blobLength},}={0,2}`, "g");
+  const findings = [];
+  for (const m of line.matchAll(re)) {
+    if (DATA_URI_TAIL.test(line.slice(Math.max(0, m.index - 64), m.index))) continue;
+    findings.push({
+      rule: "encoded-blob",
+      severity: "warning",
+      column: m.index + 1,
+      message: `${m[0].length}-character encoded string in source code`,
+      preview: m[0],
+    });
+  }
+  return findings;
+}
+
+const EXEC = /\b(?:eval|Function|execSync|exec|spawn|execFile)\s*\(/;
+const DECODE = /\b(?:atob|fromCharCode|unescape)\s*\(|Buffer\.from\s*\([^)]*['"](?:base64|hex)['"]|b64decode\s*\(/;
+
+export function decodeAndRun(line, ctx) {
+  if (!ctx.code) return [];
+  const exec = line.match(EXEC);
+  if (!exec || !DECODE.test(line)) return [];
+  return [
+    {
+      rule: "decode-and-run",
+      severity: "warning",
+      column: exec.index + 1,
+      message: "decodes a string and executes it on the same line",
+    },
+  ];
+}
+
 export const RULES = {
   "whitespace-gap": whitespaceGap,
   "invisible-char": invisibleChars,
+  "long-line": longLine,
+  "encoded-blob": encodedBlob,
+  "decode-and-run": decodeAndRun,
 };
 
 export function checkLine(line, ctx) {
