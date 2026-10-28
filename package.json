@@ -1,0 +1,20 @@
+{
+  "name": "offscreen-scan",
+  "version": "0.1.0",
+  "description": "Find code hidden where reviewers can't see it: after long runs of spaces, behind invisible Unicode, in absurdly long lines.",
+  "type": "module",
+  "bin": { "offscreen-scan": "bin/offscreen-scan.js" },
+  "exports": "./src/index.js",
+  "files": ["bin", "src"],
+  "scripts": {
+    "test": "node --test",
+    "scan": "node bin/offscreen-scan.js"
+  },
+  "engines": { "node": ">=20" },
+  "keywords": ["security", "supply-chain", "trojan-source", "unicode", "malware", "scanner", "github-action", "sarif", "code-review"],
+  "author": "Hassam Siddiqui <me@hassams.dev> (https://www.hassams.dev)",
+  "license": "MIT",
+  "homepage": "https://github.com/hassams/offscreen-scan",
+  "repository": { "type": "git", "url": "git+https://github.com/hassams/offscreen-scan.git" },
+  "bugs": "https://github.com/hassams/offscreen-scan/issues"
+}
