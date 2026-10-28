@@ -23,3 +23,19 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: npm test
 
+  self-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+      - id: scan
+        uses: ./
+        with:
+          # The tests hold decode-and-run fixtures; report errors only.
+          args: --quiet
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif-file }}

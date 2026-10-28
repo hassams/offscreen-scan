@@ -1,0 +1,64 @@
+name: offscreen-scan
+description: Find code hidden after long runs of spaces, behind invisible Unicode, or in absurdly long lines.
+author: Hassam Siddiqui
+branding:
+  icon: eye
+  color: red
+
+inputs:
+  paths:
+    description: Space-separated paths to scan. Empty scans the whole repository.
+    default: ""
+  changed-only:
+    description: On pull requests, scan only the files the PR changes (needs `fetch-depth 0` on checkout).
+    default: "false"
+  deps:
+    description: Also scan node_modules (run after your install step).
+    default: "false"
+  fail-on:
+    description: error, warning or none.
+    default: error
+  ignore:
+    description: Newline-separated globs to skip.
+    default: ""
+  args:
+    description: Extra CLI arguments, e.g. `--gap 60 --disable encoded-blob`.
+    default: ""
+  sarif-file:
+    description: Where to write the SARIF report, for github/codeql-action/upload-sarif.
+    default: offscreen-scan.sarif
+
+outputs:
+  sarif-file:
+    description: Path of the SARIF report.
+    value: ${{ inputs.sarif-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Scan for hidden code
+      shell: bash
+      # Inputs reach the script as environment variables, never as text
+      # spliced into it.
+      env:
+        OS_PATHS: ${{ inputs.paths }}
+        OS_CHANGED_ONLY: ${{ inputs.changed-only }}
+        OS_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        OS_DEPS: ${{ inputs.deps }}
+        OS_FAIL_ON: ${{ inputs.fail-on }}
+        OS_IGNORE: ${{ inputs.ignore }}
+        OS_ARGS: ${{ inputs.args }}
+        OS_SARIF: ${{ inputs.sarif-file }}
+      run: |
+        set -euo pipefail
+        args=(--format github --output "$OS_SARIF" --output-format sarif --fail-on "$OS_FAIL_ON")
+        if [[ "$OS_CHANGED_ONLY" == "true" && -n "$OS_BASE_SHA" ]]; then
+          args+=(--changed "$OS_BASE_SHA")
+        fi
+        [[ "$OS_DEPS" == "true" ]] && args+=(--deps)
+        while IFS= read -r glob; do
+          [[ -n "$glob" ]] && args+=(--ignore "$glob")
+        done <<< "$OS_IGNORE"
+        read -ra extra <<< "$OS_ARGS"
+        read -ra paths <<< "$OS_PATHS"
+        node "$GITHUB_ACTION_PATH/bin/offscreen-scan.js" "${args[@]}" ${extra[@]+"${extra[@]}"} ${paths[@]+"${paths[@]}"}
