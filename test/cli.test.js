@@ -57,10 +57,25 @@ test("sarif output is written alongside", () => {
   assert.equal(sarif.runs[0].results[0].locations[0].physicalLocation.region.startColumn, 1518);
 });
 
+test("--fail-on and --ignore", () => {
+  const dir = repo({ "a.js": hidden, "fixtures/b.js": hidden });
+  assert.equal(run(dir, "--fail-on", "none").status, 0);
+  const r = run(dir, "--ignore", "a.js", "--ignore", "fixtures/**");
+  assert.equal(r.status, 0, r.stdout);
+});
+
 test("warnings fail only with --fail-on warning", () => {
   const dir = repo({ "a.js": "eval(atob(s));\n" });
   assert.equal(run(dir).status, 0);
   assert.equal(run(dir, "--fail-on", "warning").status, 1);
+});
+
+test("git mode skips ignored files; --deps adds node_modules", () => {
+  const dir = repo({ ".gitignore": "node_modules/\n", "a.js": "ok;\n", "node_modules/evil/index.js": hidden });
+  assert.equal(run(dir).status, 0);
+  const r = run(dir, "--deps");
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /node_modules\/evil\/index\.js/);
 });
 
 test("works outside git and skips binary files", () => {
@@ -70,6 +85,17 @@ test("works outside git and skips binary files", () => {
   const json = JSON.parse(r.stdout);
   assert.equal(json.files, 2);
   assert.equal(json.scanned, 1);
+});
+
+test("--changed scans only files changed since a ref", () => {
+  const dir = repo({ "old.js": hidden });
+  execFileSync("git", ["checkout", "-qb", "feature"], { cwd: dir });
+  writeFileSync(join(dir, "new.js"), "ok;\n");
+  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "add", "."], { cwd: dir });
+  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"], { cwd: dir });
+  const r = run(dir, "--changed", "main");
+  assert.equal(r.status, 0, r.stdout);
+  assert.match(r.stdout, /1 scanned file/);
 });
 
 test("bad arguments exit 2", () => {
